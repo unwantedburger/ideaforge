@@ -66,12 +66,17 @@ class ListenerAgent {
       userPrompt += `\n\nMeeting context so far:\n${meetingContext}`;
     }
 
+    this._verbose('SYSTEM', SYSTEM_PROMPT);
+    this._verbose('USER', userPrompt);
+
     let text;
     if (this._useAnthropic) {
       text = await this._callAnthropic(userPrompt);
     } else {
       text = await this._callOpenAI(userPrompt);
     }
+
+    this._verbose('RESPONSE', text);
 
     // Extract JSON from response (handle markdown code blocks)
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
@@ -91,6 +96,14 @@ class ListenerAgent {
     if (conceptBundle.confidence < 0.3) return false;
     if (conceptBundle.action === 'wait') return false;
     return true;
+  }
+
+  _verbose(label, content) {
+    if (!process.env.VERBOSE) return;
+    console.log(`\n${'─'.repeat(60)}`);
+    console.log(`[VERBOSE:listener:${label}]`);
+    console.log(typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+    console.log('─'.repeat(60) + '\n');
   }
 
   async _callAnthropic(userPrompt) {

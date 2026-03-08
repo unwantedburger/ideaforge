@@ -77,6 +77,12 @@ class VisualizerAgent {
   }
 
   async _generateDalle(prompt) {
+    if (process.env.VERBOSE) {
+      console.log(`\n${'─'.repeat(60)}`);
+      console.log('[VERBOSE:visualizer:DALL-E PROMPT]');
+      console.log(`Moodboard image: ${prompt}. Professional, high quality, editorial style.`);
+      console.log('─'.repeat(60) + '\n');
+    }
     if (!this.openaiKey) {
       logger.warn('visualizer', 'No OPENAI_API_KEY — returning placeholder');
       return { url: null, b64_json: null, placeholder: true };
