@@ -4,6 +4,7 @@
     "whisperModel": "whisper-1",
     "language": "no",
     "conceptExtractionModel": "gpt-4o-mini",
+    "claudeModel": "claude-sonnet-4-20250514",
     "minConfidence": 0.3
   },
   "visualizer": {

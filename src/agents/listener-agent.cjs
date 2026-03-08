@@ -27,17 +27,28 @@ Respond with exactly this JSON structure:
 
 class ListenerAgent {
   constructor(opts = {}) {
-    this.apiKey = opts.apiKey || process.env.OPENAI_API_KEY || null;
-    this.model = opts.model || 'gpt-4o-mini';
-    this.apiUrl = 'https://api.openai.com/v1/chat/completions';
     this.openaiKey = opts.openaiKey || process.env.OPENAI_API_KEY || null;
+    this.anthropicKey = opts.anthropicKey || process.env.ANTHROPIC_API_KEY || null;
+    this._useAnthropic = !!this.anthropicKey;
+
+    // For concept extraction: prefer Anthropic if available, fall back to OpenAI
+    this.model = this._useAnthropic
+      ? (opts.claudeModel || 'claude-sonnet-4-20250514')
+      : (opts.model || 'gpt-4o-mini');
+
     this.whisperModel = opts.whisperModel || 'whisper-1';
     this.language = opts.language || 'no';
   }
 
-  _getApiKey() {
-    if (this.apiKey) return this.apiKey;
-    throw new Error('OPENAI_API_KEY not set');
+  _getConceptApiKey() {
+    if (this._useAnthropic && this.anthropicKey) return this.anthropicKey;
+    if (this.openaiKey) return this.openaiKey;
+    throw new Error('No API key set — provide ANTHROPIC_API_KEY or OPENAI_API_KEY');
+  }
+
+  _getWhisperKey() {
+    if (this.openaiKey) return this.openaiKey;
+    throw new Error('OPENAI_API_KEY required for audio transcription (Whisper)');
   }
 
   /**
@@ -47,40 +58,20 @@ class ListenerAgent {
    * @returns {Promise<object>} Concept bundle
    */
   async extractConcepts(transcript, meetingContext = '') {
-    const apiKey = this._getApiKey();
-    logger.info?.('listener', 'Extracting concepts from transcript');
+    this._getConceptApiKey(); // validate early
+    logger.info?.('listener', `Extracting concepts via ${this._useAnthropic ? 'Claude' : 'OpenAI'}`);
 
     let userPrompt = `Analyze this transcript segment and extract visual concepts:\n\n"${transcript}"`;
     if (meetingContext) {
       userPrompt += `\n\nMeeting context so far:\n${meetingContext}`;
     }
 
-    const body = {
-      model: this.model,
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-    };
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`OpenAI API error ${res.status}: ${errText}`);
+    let text;
+    if (this._useAnthropic) {
+      text = await this._callAnthropic(userPrompt);
+    } else {
+      text = await this._callOpenAI(userPrompt);
     }
-
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content || '{}';
 
     // Extract JSON from response (handle markdown code blocks)
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
@@ -102,8 +93,57 @@ class ListenerAgent {
     return true;
   }
 
-  /** Legacy compat: transcribe audio via Whisper */
+  async _callAnthropic(userPrompt) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.anthropicKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Anthropic API error ${res.status}: ${errText}`);
+    }
+    const data = await res.json();
+    return data.content?.[0]?.text || '{}';
+  }
+
+  async _callOpenAI(userPrompt) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: 1024,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`OpenAI API error ${res.status}: ${errText}`);
+    }
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || '{}';
+  }
+
+  /** Transcribe audio via Whisper (always requires OpenAI key) */
   async transcribe(audioFilePath) {
+    this._getWhisperKey(); // validate
     const { processAudioFile } = require('../data/audio-provider.cjs');
     const result = processAudioFile(audioFilePath, { language: this.language });
     return result.text;
