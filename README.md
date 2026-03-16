@@ -7,13 +7,13 @@ IdeaForge listens to your meeting (via browser microphone or text input), extrac
 ## How It Works
 
 ```
-🎤 Voice/Text → 🧠 GPT-4o-mini (concepts) → 🎨 DALL-E 3 (images) → 📋 Live Moodboard
+🎤 Voice/Text → 🧠 Claude/GPT-4o-mini (concepts) → 🎨 DALL-E 3 (images) → 📋 Live Moodboard
 ```
 
 **Pipeline:**
-1. **Listener Agent** — Transcribes audio (Whisper) and extracts concepts, mood, keywords, color palettes (GPT-4o-mini)
+1. **Listener Agent** — Transcribes audio (Whisper) and extracts concepts, mood, keywords, color palettes (Claude or GPT-4o-mini)
 2. **Visualizer Agent** — Generates images from concepts (DALL-E 3 + Gemini fallback)
-3. **Curator Agent** — Organizes visuals into themed sections (GPT-4o-mini)
+3. **Curator Agent** — Organizes visuals into themed sections (Claude or GPT-4o-mini)
 4. **Presenter Agent** — Serves a live moodboard with SSE real-time updates
 
 ## Quick Start
@@ -37,10 +37,21 @@ open http://localhost:3333
 ## Requirements
 
 - **Node.js 18+** (uses built-in `fetch`)
-- **OpenAI API key** — for GPT-4o-mini (concepts) + Whisper (transcription) + DALL-E 3 (images)
+- **OpenAI API key** — for Whisper (transcription) + DALL-E 3 (images)
+- **Anthropic API key** _(recommended)_ — Claude for concept extraction + board curation
 - **Gemini API key** _(optional)_ — fallback image generation
 
 No `npm install` required — zero external dependencies.
+
+## API Key Routing
+
+| Key | Used for |
+|---|---|
+| `ANTHROPIC_API_KEY` | Concept extraction (ListenerAgent) + board curation (CuratorAgent) |
+| `OPENAI_API_KEY` | Image generation (DALL-E 3) + audio transcription (Whisper) |
+| `GEMINI_API_KEY` | Optional fallback image generation |
+
+If `ANTHROPIC_API_KEY` is set, it takes priority for all text/reasoning tasks. Falls back to GPT-4o-mini if only `OPENAI_API_KEY` is provided.
 
 ## Usage
 
@@ -77,11 +88,16 @@ node scripts/process-voice.cjs path/to/audio.webm "Session Title"
 ## Environment Variables
 
 ```bash
-# Required
-OPENAI_API_KEY=sk-...          # GPT-4o-mini + Whisper + DALL-E 3
+# Recommended — Claude for concept extraction + curation
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Required — Whisper transcription + DALL-E 3 image generation
+OPENAI_API_KEY=sk-proj-...
+
+# Optional — Gemini fallback image generation
+GEMINI_API_KEY=AI...
 
 # Optional
-GEMINI_API_KEY=AI...           # Fallback image generation (Gemini 2.5 Flash)
 PORT=3333                      # Server port (default: 3333)
 ```
 
@@ -91,9 +107,9 @@ PORT=3333                      # Server port (default: 3333)
 src/
 ├── agents/
 │   ├── director-agent.cjs     # Orchestrator — wires all agents together
-│   ├── listener-agent.cjs     # Concept extraction (GPT-4o-mini)
+│   ├── listener-agent.cjs     # Concept extraction (Claude or GPT-4o-mini)
 │   ├── visualizer-agent.cjs   # Image generation (DALL-E 3 + Gemini)
-│   ├── curator-agent.cjs      # Board organization (GPT-4o-mini)
+│   ├── curator-agent.cjs      # Board organization (Claude or GPT-4o-mini)
 │   └── presenter-agent.cjs    # Board state + server management
 ├── canvas/
 │   ├── server.cjs             # HTTP + SSE server with audio/text endpoints
@@ -115,7 +131,6 @@ The server binds to `0.0.0.0` — accessible from any device on the same network
 
 **WSL2 users:** You may need to add a port proxy:
 ```powershell
-# Run in Administrator PowerShell
 netsh interface portproxy add v4tov4 listenport=3333 listenaddress=0.0.0.0 connectport=3333 connectaddress=$(wsl hostname -I | cut -d' ' -f1)
 ```
 
@@ -127,7 +142,8 @@ netsh interface portproxy add v4tov4 listenport=3333 listenaddress=0.0.0.0 conne
 
 ## Built With
 
-- [OpenAI API](https://platform.openai.com/) — GPT-4o-mini, Whisper, DALL-E 3
+- [Anthropic Claude](https://www.anthropic.com/) — Concept extraction + board curation
+- [OpenAI API](https://platform.openai.com/) — Whisper, DALL-E 3
 - [Google Gemini API](https://ai.google.dev/) — Image generation fallback
 - Pure Node.js — zero npm dependencies
 

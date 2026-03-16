@@ -45,11 +45,27 @@ Return JSON:
   "timeline_event": "description of change"
 }`;
 
+    if (process.env.VERBOSE) {
+      console.log(`\n${'─'.repeat(60)}`);
+      console.log('[VERBOSE:curator:SYSTEM]');
+      console.log(systemPrompt);
+      console.log('[VERBOSE:curator:USER]');
+      console.log(userPrompt);
+      console.log('─'.repeat(60) + '\n');
+    }
+
     let text;
     if (this._useAnthropic) {
       text = await this._callAnthropic(systemPrompt, userPrompt);
     } else {
       text = await this._callOpenAI(systemPrompt, userPrompt);
+    }
+
+    if (process.env.VERBOSE) {
+      console.log(`\n${'─'.repeat(60)}`);
+      console.log('[VERBOSE:curator:RESPONSE]');
+      console.log(text);
+      console.log('─'.repeat(60) + '\n');
     }
 
     try {
